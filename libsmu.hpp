@@ -44,7 +44,8 @@ public:
 	void run(sample_t nsamples);
 	void start(sample_t nsamples);
 	void cancel();
-
+	void wait_for_completion();
+	
 	/// Called by devices on the USB thread when they are complete
 	void completion();
 

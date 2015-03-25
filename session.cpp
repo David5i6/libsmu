@@ -203,6 +203,14 @@ void Session::run(sample_t nsamples) {
 	end();
 }
 
+// wait for completion of sample stream
+void Session::wait_for_completion() {
+	// completion lock
+	std::unique_lock<std::mutex> lk(m_lock);
+	// wait on m_completion, return m_active_devices compared with 0
+	m_completion.wait(lk, [&]{ return m_active_devices == 0; });
+}
+
 // wait for completion of sample stream, disable all devices
 void Session::end() {
 	// completion lock
