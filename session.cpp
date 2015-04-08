@@ -84,6 +84,7 @@ void Session::detached(libusb_device *device)
 		if (dev) {
 			cerr << "Session::detached ser: " << dev->serial() << endl;
 			this->m_hotplug_detach_callback(dev);
+			update_available_devices();
 		}
 	}
 }
