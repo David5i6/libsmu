@@ -64,7 +64,7 @@ Session::~Session() {
 
 /// callback for device attach events
 void Session::attached(libusb_device *device) {
-	shared_ptr<Device> dev = probe_device(device);
+	Device * dev = probe_device(device);
 	if (dev) {
 		m_available_devices.push_back(dev);
 		cerr << "Session::attached ser: " << dev->serial() << endl;
@@ -80,7 +80,7 @@ void Session::attached(libusb_device *device) {
 void Session::detached(libusb_device *device)
 {
 	if (this->m_hotplug_detach_callback) {
-		Device *dev = &*this->find_existing_device(device);
+		Device * dev = this->find_existing_device(device);
 		if (dev) {
 			cerr << "Session::detached ser: " << dev->serial() << endl;
 			this->m_hotplug_detach_callback(dev);
@@ -117,7 +117,7 @@ int Session::update_available_devices() {
 	if (num < 0) return num;
 
 	for (int i=0; i<num; i++) {
-		shared_ptr<Device> dev = probe_device(list[i]);
+		Device * dev = probe_device(list[i]);
 		if (dev) {
 			m_available_devices.push_back(dev);
 		}
@@ -128,8 +128,8 @@ int Session::update_available_devices() {
 }
 
 /// identify devices supported by libsmu
-shared_ptr<Device> Session::probe_device(libusb_device* device) {
-	shared_ptr<Device> dev = find_existing_device(device);
+Device * Session::probe_device(libusb_device* device) {
+	Device * dev = find_existing_device(device);
 
 	libusb_device_descriptor desc;
 	int r = libusb_get_device_descriptor(device, &desc);
@@ -139,11 +139,11 @@ shared_ptr<Device> Session::probe_device(libusb_device* device) {
 	}
 
 	if (desc.idVendor == 0x59e3 && desc.idProduct == 0xCEE1) {
-		dev = shared_ptr<Device>(new CEE_Device(this, device));
+		dev = (Device *)(new CEE_Device(this, device));
 	} else if (desc.idVendor == 0x0456 && desc.idProduct == 0xCEE2) {
-		dev = shared_ptr<Device>(new M1000_Device(this, device));
+		dev = (Device *)(new M1000_Device(this, device));
 	} else if (desc.idVendor == 0x064B && desc.idProduct == 0x784C) {
-		dev = shared_ptr<Device>(new M1000_Device(this, device));
+		dev = (Device *)(new M1000_Device(this, device));
 	}
 
 	if (dev) {
@@ -157,7 +157,7 @@ shared_ptr<Device> Session::probe_device(libusb_device* device) {
 	return NULL;
 }
 
-shared_ptr<Device> Session::find_existing_device(libusb_device* device) {
+Device * Session::find_existing_device(libusb_device* device) {
 	for (auto d: m_available_devices) {
 		if (d->m_device == device) {
 			return d;
