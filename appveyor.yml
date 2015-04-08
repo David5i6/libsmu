@@ -1,4 +1,4 @@
-os: unstable 
+os: unstable
 
 platform:
  - x86
@@ -11,9 +11,12 @@ install:
   - 7z x -y "c:\libusb.7z" -o"C:\libusb" > nul
 
 build_script:
-  - mingw32-make 
-  - dlltool --export-all-symbols -l libsmu.lib -z libsmu.def libsmu.dll
+  - mingw32-make
+  - appveyor PushArtifact libsmu.dll
+  - appveyor PushArtifact libsmu.hpp
+  - echo EXPORTS > libsmu.def
+  - for /f "usebackq tokens=4,* delims=_ " %i in (`dumpbin /exports "libsmu.dll"`) do if %i==libsmu echo %i_%j >> libsmu.def
+  - dlltool --dllname libsmu.dll --input-def libsmu.def --output-lib libsmu.lib
   - appveyor PushArtifact smu.exe
   - appveyor PushArtifact libsmu.lib
   - appveyor PushArtifact libsmu.def
-  - appveyor PushArtifact libsmu.hpp
