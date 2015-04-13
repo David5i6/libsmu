@@ -19,7 +19,11 @@
 #endif
 
 #ifdef _WIN32
-#define __api __declspec(dllexport)
+#	define __api __declspec(dllexport)
+#elif __GNUC__ >= 4
+#   define __api __attribute__((visibility ("default")))
+#else
+#   define __api
 #endif
 
 class Device;
@@ -29,7 +33,7 @@ struct libusb_device_handle;
 struct libusb_context;
 
 
-class Session {
+class __api Session {
 public:
 	Session();
 	~Session();
@@ -116,7 +120,7 @@ protected:
 	Device * find_existing_device(libusb_device* device);
 };
 
-class Device {
+class __api Device {
 public:
 	virtual ~Device();
 
@@ -209,7 +213,7 @@ enum Modes {
 	SIMV,
 };
 
-class Signal {
+class __api Signal {
 public:
 	/// internal: Do not call the constructor directly; obtain a Signal from a Device
 	Signal(const sl_signal_info* info): m_info(info), m_src(SRC_CONSTANT), m_src_v1(0), m_dest(DEST_NONE) {}
