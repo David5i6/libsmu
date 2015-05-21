@@ -1,15 +1,16 @@
 // Released under the terms of the BSD License
 // (C) 2014-2015
+//   Analog Devices, Inc.
 //   Kevin Mehall <km@kevinmehall.net>
 //   Ian Daniher <itdaniher@gmail.com>
 
 #include "libsmu.hpp"
 #include <iostream>
 #include <libusb.h>
+#include <string.h>
 #include "device_cee.hpp"
 #include "device_m1000.hpp"
 
-using std::cout;
 using std::cerr;
 using std::endl;
 using std::shared_ptr;
@@ -17,7 +18,7 @@ using std::shared_ptr;
 extern "C" int LIBUSB_CALL hotplug_callback_usbthread(
 	libusb_context *ctx, libusb_device *device, libusb_hotplug_event event, void *user_data);
 
-// session constructor
+/// session constructor
 Session::Session() {
 	m_active_devices = 0;
 
@@ -50,8 +51,9 @@ Session::Session() {
 	}
 }
 
-// session destructor
+/// session destructor
 Session::~Session() {
+	std::lock_guard<std::mutex> lock(m_lock_devlist);
 	// Run device destructors before libusb_exit
 	m_usb_thread_loop = 0;
 	m_devices.clear();
@@ -62,16 +64,15 @@ Session::~Session() {
 	libusb_exit(m_usb_cx);
 }
 
-// callback for device attach events
+/// callback for device attach events
 void Session::attached(libusb_device *device) {
 	shared_ptr<Device> dev = probe_device(device);
 	if (dev) {
+		std::lock_guard<std::mutex> lock(m_lock_devlist);
 		m_available_devices.push_back(dev);
 		cerr << "Session::attached ser: " << dev->serial() << endl;
 		if (this->m_hotplug_attach_callback) {
-			cerr << dev << endl;
 			this->m_hotplug_attach_callback(&*dev);
-			cerr << dev << endl;
 		}
 	}
 }
@@ -88,7 +89,17 @@ void Session::detached(libusb_device *device)
 	}
 }
 
-// low-level callback for hotplug events, proxies to session methods
+
+/// remove a specified Device from the list of available devices
+void Session::destroy_available(Device *dev) {
+	std::lock_guard<std::mutex> lock(m_lock_devlist);
+	if (dev)
+		for (unsigned i = 0; i < m_available_devices.size(); i++)
+			if (m_available_devices[i]->serial() == dev->serial())
+				m_available_devices.erase(m_available_devices.begin()+i);
+}
+
+/// low-level callback for hotplug events, proxies to session methods
 extern "C" int LIBUSB_CALL hotplug_callback_usbthread(
     libusb_context *ctx, libusb_device *device, libusb_hotplug_event event, void *user_data) {
     (void) ctx;
@@ -101,7 +112,7 @@ extern "C" int LIBUSB_CALL hotplug_callback_usbthread(
 	return 0;
 }
 
-// spawn thread for USB transaction handling
+/// spawn thread for USB transaction handling
 void Session::start_usb_thread() {
 	m_usb_thread_loop = true;
 	m_usb_thread = std::thread([=]() {
@@ -109,9 +120,11 @@ void Session::start_usb_thread() {
 	});
 }
 
-// update list of attached USB devices
+/// update list of attached USB devices
 int Session::update_available_devices() {
+	m_lock_devlist.lock();
 	m_available_devices.clear();
+	m_lock_devlist.unlock();
 	libusb_device** list;
 	int num = libusb_get_device_list(m_usb_cx, &list);
 	if (num < 0) return num;
@@ -119,7 +132,9 @@ int Session::update_available_devices() {
 	for (int i=0; i<num; i++) {
 		shared_ptr<Device> dev = probe_device(list[i]);
 		if (dev) {
+			m_lock_devlist.lock();
 			m_available_devices.push_back(dev);
+			m_lock_devlist.unlock();
 		}
 	}
 
@@ -127,7 +142,7 @@ int Session::update_available_devices() {
 	return 0;
 }
 
-// identify devices supported by libsmu
+/// identify devices supported by libsmu
 shared_ptr<Device> Session::probe_device(libusb_device* device) {
 	shared_ptr<Device> dev = find_existing_device(device);
 
@@ -149,6 +164,9 @@ shared_ptr<Device> Session::probe_device(libusb_device* device) {
 	if (dev) {
 		if (dev->init() == 0) {
 			libusb_get_string_descriptor_ascii(dev->m_usb, desc.iSerialNumber, (unsigned char*)&dev->serial_num, 32);
+			libusb_control_transfer(dev->m_usb, 0xC0, 0x00, 0, 0, (unsigned char*)&dev->m_hw_version, 64, 100);
+			libusb_control_transfer(dev->m_usb, 0xC0, 0x00, 0, 1, (unsigned char*)&dev->m_fw_version, 64, 100);
+
 			return dev;
 		} else {
 			perror("Error initializing device");
@@ -158,6 +176,7 @@ shared_ptr<Device> Session::probe_device(libusb_device* device) {
 }
 
 shared_ptr<Device> Session::find_existing_device(libusb_device* device) {
+	std::lock_guard<std::mutex> lock(m_lock_devlist);
 	for (auto d: m_available_devices) {
 		if (d->m_device == device) {
 			return d;
@@ -166,8 +185,17 @@ shared_ptr<Device> Session::find_existing_device(libusb_device* device) {
 	return NULL;
 }
 
+/// get the device matching a given serial from the session
+Device* Session::get_device(const char* serial) {
+	for (auto d: m_devices) {
+		if (strncmp(d->serial(), serial, 31) == 0) {
+			return d;
+		}
+	}
+	return NULL;
+}
 
-// adds a new device to the session
+/// adds a new device to the session
 Device* Session::add_device(Device* device) {
 	if ( device ) {
 		m_devices.insert(device);
@@ -178,43 +206,53 @@ Device* Session::add_device(Device* device) {
 	return NULL;
 }
 
-// removes an existing device from the session
+/// removes an existing device from the session
 void Session::remove_device(Device* device) {
 	if ( device ) {
 		m_devices.erase(device);
 		device->removed();
-		cerr << "m_devices.size() " << m_devices.size() << endl;
 	}
 	else {
 		cerr << "no device removed" << endl;
 	}
 }
 
-// configures sampling for all devices
+/// configures sampling for all devices
 void Session::configure(uint64_t sampleRate) {
 	for (auto i: m_devices) {
 		i->configure(sampleRate);
 	}
 }
 
-// stream nsamples, then stop
+/// stream nsamples, then stop
 void Session::run(sample_t nsamples) {
 	start(nsamples);
 	end();
 }
 
-// wait for completion of sample stream, disable all devices
+/// wait for completion of sample stream, disable all devices
 void Session::end() {
 	// completion lock
 	std::unique_lock<std::mutex> lk(m_lock);
+	auto now = std::chrono::system_clock::now();
+	auto res = m_completion.wait_until(lk, now + std::chrono::milliseconds(1000), [&]{ return m_active_devices == 0; });
+    //  m_completion.wait(lk, [&]{ return m_active_devices == 0; });
 	// wait on m_completion, return m_active_devices compared with 0
-	m_completion.wait(lk, [&]{ return m_active_devices == 0; });
+    if (!res) {
+        cerr << "timed out" << endl;
+    }
 	for (auto i: m_devices) {
 		i->off();
 	}
 }
+/// wait for completion of sample stream
+void Session::wait_for_completion() {
+	// completion lock
+	std::unique_lock<std::mutex> lk(m_lock);
+	m_completion.wait(lk, [&]{ return m_active_devices == 0; });
+}
 
-// start streaming data
+/// start streaming data
 void Session::start(sample_t nsamples) {
 	m_min_progress = 0;
     m_cancellation = 0;
@@ -228,7 +266,7 @@ void Session::start(sample_t nsamples) {
 	}
 }
 
-// cancel all pending USB transactions
+/// cancel all pending USB transactions
 void Session::cancel() {
 	m_cancellation = LIBUSB_TRANSFER_CANCELLED;
 	for (auto i: m_devices) {
@@ -236,20 +274,22 @@ void Session::cancel() {
 	}
 }
 
-// Called on the USB thread when a device encounters an error
-void Session::handle_error(unsigned status) {
+/// Called on the USB thread when a device encounters an error
+void Session::handle_error(int status, const char * tag) {
 	std::lock_guard<std::mutex> lock(m_lock);
-	if (m_cancellation == 0) {
+	// a canceled transfer completing is not an error...
+	if ((m_cancellation == 0) && (status != LIBUSB_TRANSFER_CANCELLED) ) {
+		cerr << "error condition at " << tag << " " << libusb_error_name(status) << endl;
 		m_cancellation = status;
 		cancel();
 	}
 }
 
-// called upon completion of a sample stream
+/// called upon completion of a sample stream
 void Session::completion() {
 	// On USB thread
-	std::lock_guard<std::mutex> lock(m_lock);
 	m_active_devices -= 1;
+	std::lock_guard<std::mutex> lock(m_lock);
 	if (m_active_devices == 0) {
 		if (m_completion_callback) {
 			m_completion_callback(m_cancellation != 0);
@@ -293,7 +333,7 @@ Device::~Device() {
 }
 
 // generic implementation of ctrl_transfers
-void Device::ctrl_transfer(unsigned bmRequestType, unsigned bRequest, unsigned wValue, unsigned wIndex, unsigned char *data, unsigned wLength, unsigned timeout)
+int Device::ctrl_transfer(unsigned bmRequestType, unsigned bRequest, unsigned wValue, unsigned wIndex, unsigned char *data, unsigned wLength, unsigned timeout)
 {
-	libusb_control_transfer(m_usb, bmRequestType, bRequest, wValue, wIndex, data, wLength, timeout);
+	return libusb_control_transfer(m_usb, bmRequestType, bRequest, wValue, wIndex, data, wLength, timeout);
 }

@@ -9,7 +9,6 @@
 #include <cstring>
 #include <cmath>
 
-using std::cout;
 using std::cerr;
 using std::endl;
 
@@ -127,7 +126,7 @@ int CEE_Device::init() {
 
 	std::cerr << "    Hardware: " << m_hw_version << std::endl;
 	std::cerr << "    Firmware version: " << m_fw_version << " (" << m_git_version << ")" << std::endl;
-	std::cerr << "    Supported sample rate: " << CEE_timer_clock / m_min_per / 1000.0 << "ksps" << std::endl;
+	std::cerr << "    Supported sample rate: " << (double) CEE_timer_clock / (double) m_min_per / 1000.0 << "ksps" << std::endl;
 	return 0;
 }
 
@@ -226,8 +225,7 @@ void CEE_Device::in_completion(libusb_transfer* t) {
 			submit_in_transfer(t);
 		}
 	} else if (t->status != LIBUSB_TRANSFER_CANCELLED) {
-		std::cerr << "ITransfer error "<< t->status << " " << t << std::endl;
-		m_session->handle_error(t->status);
+		m_session->handle_error(t->status, "CEE_Device::in_completion");
 	}
 
 	if (m_out_transfers.num_active == 0 && m_in_transfers.num_active == 0) {
@@ -255,8 +253,7 @@ void CEE_Device::out_completion(libusb_transfer* t) {
 			submit_out_transfer(t);
 		}
 	} else if (t->status != LIBUSB_TRANSFER_CANCELLED) {
-		std::cerr << "OTransfer error "<< t->status << " " << t << std::endl;
-		m_session->handle_error(t->status);
+		m_session->handle_error(t->status, "CEE_Device::out_completion");
 	}
 
 	if (m_out_transfers.num_active == 0 && m_in_transfers.num_active == 0) {
@@ -281,7 +278,7 @@ void CEE_Device::configure(uint64_t rate) {
 	std::cerr << "CEE prepare "<< m_xmega_per << " " << transfers <<  " " << m_packets_per_transfer << std::endl;
 }
 
-inline uint16_t CEE_Device::encode_out(int chan, uint32_t igain) {
+inline uint16_t CEE_Device::encode_out(unsigned chan, uint32_t igain) {
 	int v = 0;
 	if (m_mode[chan] == SVMI) {
 		float val = m_signals[chan][0]->get_sample();

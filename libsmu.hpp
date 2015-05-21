@@ -1,5 +1,6 @@
 // Released under the terms of the BSD License
 // (C) 2014-2015
+//   Analog Devices, Inc.
 //   Kevin Mehall <km@kevinmehall.net>
 //   Ian Daniher <itdaniher@gmail.com>
 
@@ -18,6 +19,10 @@
 #define M_PI (4.0*atan(1.0))
 #endif
 
+#ifdef _WIN32
+#define __api __declspec(dllexport)
+#endif
+
 class Device;
 class Signal;
 struct libusb_device;
@@ -32,51 +37,89 @@ public:
 
 	int update_available_devices();
 	unsigned m_active_devices;
+
+	/// Devices that are present on the system, but aren't necessarily in bound to this session.
+	/// Only `Device::serial` and `Device::info` may be called on a Device that is not added to
+	/// the session.
 	std::vector<std::shared_ptr<Device>> m_available_devices;
 
+	/// Add a device (from m_available_devices) to the session.
+	/// This method may not be called while the session is active.
 	Device* add_device(Device*);
-	std::set<Device*> m_devices;
-	void remove_device(Device*);
-	void configure(uint64_t sampleRate);
-	std::function<void(sample_t)> m_progress_cb;
 
-	// Run the currently configured capture and wait for it to complete
+	/// Devices that are part of this session. These devices will be started when start() is called.
+	/// Use `add_device` and `remove_device` to manipulate this list.
+	std::set<Device*> m_devices;
+
+	/// get the device matching a given serial from the session
+	Device* get_device(const char* serial);
+
+	/// Remove a device from the session.
+	/// This method may not be called while the session is active
+	void remove_device(Device*);
+
+	/// Remove a device from the list of available devices.
+	/// Devices are automatically added to this list on attach.
+	/// Devies must be removed from this list on detach.
+	/// This method may not be called while the session is active
+	void destroy_available(Device*);
+
+	/// Configure the session's sample rate.
+	/// This method may not be called while the session is active.
+	void configure(uint64_t sampleRate);
+
+	/// Run the currently configured capture and wait for it to complete
 	void run(sample_t nsamples);
+
+	/// Start the currently configured capture, but do not wait for it to complete. Once started,
+	/// the only allowed Session methods are cancel() and end() until the session has stopped.
 	void start(sample_t nsamples);
+
+	/// Cancel capture and block waiting for it to complete
 	void cancel();
 
-	/// Called by devices on the USB thread when they are complete
+	/// internal: Called by devices on the USB thread when they are complete
 	void completion();
 
-	/// Called on the USB thread when a device encounters an error
-	void handle_error(unsigned status);
+	/// internal: Called by devices on the USB thread when a device encounters an error
+	void handle_error(int status, const char * tag);
 
-	/// Called by devices on the USB thread with progress updates
+	/// internal: Called by devices on the USB thread with progress updates
 	void progress();
-	// called by hotplug events on the USB thread
+	/// internal: called by hotplug events on the USB thread
 	void attached(libusb_device* device);
 	void detached(libusb_device* device);
+
+	/// Block until all devices have completed
+	void wait_for_completion();
 
 	/// Block until all devices have completed, then turn off the devices
 	void end();
 
+	/// Callback called on the USB thread with the sample number as samples are received
 	std::function<void(sample_t)> m_progress_callback;
+
+	/// Callback called on the USB thread on completion
 	std::function<void(unsigned)> m_completion_callback;
+
+	/// Callback called on the USB thread when a device is plugged into the system
 	std::function<void(Device* device)> m_hotplug_detach_callback;
+
+	/// Callback called on the USB thread when a device is removed from the system
 	std::function<void(Device* device)> m_hotplug_attach_callback;
 
-	unsigned m_cancellation;
+	unsigned m_cancellation = 0;
 
 protected:
-	sample_t m_min_progress;
+	sample_t m_min_progress = 0;
 
 	void start_usb_thread();
 	std::thread m_usb_thread;
 	bool m_usb_thread_loop;
 
 	std::mutex m_lock;
+	std::mutex m_lock_devlist;
 	std::condition_variable m_completion;
-
 
 	libusb_context* m_usb_cx;
 
@@ -87,16 +130,45 @@ protected:
 class Device {
 public:
 	virtual ~Device();
+
+	/// Get the descriptor for the device.
+	/// Pointed-to memory is valid for the lifetime of the Device.
+	/// This method may be called on a device that is not added to the session.
 	virtual const sl_device_info* info() const = 0;
+
+	/// Get the descriptor for the specified channel.
+	/// Pointed-to memory is valid for the lifetime of the Device.
 	virtual const sl_channel_info*  channel_info(unsigned channel) const = 0;
+
+	/// Get the specified Signal.
 	virtual Signal* signal(unsigned channel, unsigned signal) = 0;
+
+	/// Get the serial number of the device.
+	/// Pointed-to memory is valid for the lifetime of the Device.
+	/// This method may be called on a device that is not added to the session.
 	virtual const char* serial() const { return this->serial_num; }
+	virtual const char* fwver() const { return this->m_fw_version; }
+	virtual const char* hwver() const { return this->m_hw_version; }
+
+	/// Set the mode of the specified channel.
+	/// This method may not be called while the session is active.
 	virtual void set_mode(unsigned channel, unsigned mode) = 0;
-	void ctrl_transfer(unsigned bmRequestType, unsigned bRequest, unsigned wValue, unsigned wIndex, unsigned char *data, unsigned wLength, unsigned timeout);
-	virtual int get_default_rate() {return 10000;};
+
+	/// Perform a raw USB control transfer on the underlying USB device
+	int ctrl_transfer(unsigned bmRequestType, unsigned bRequest, unsigned wValue, unsigned wIndex,
+		               unsigned char *data, unsigned wLength, unsigned timeout);
+
+	/// Get the default sample rate.
+	virtual int get_default_rate() { return 10000; }
+
+	/// Prepare multi-device synchronization.
 	virtual void sync() {};
 
+	/// Lock the Device's mutex, preventing this device's transfers from being processed. Hold
+	/// this lock only briefly, while modifying Signal state.
 	virtual void lock() { m_state.lock(); }
+
+	/// Unlock the Device's mutex, allowing this device's transfers to be processed.
 	virtual void unlock() { m_state.unlock(); }
 
 
@@ -117,12 +189,14 @@ protected:
 	libusb_device_handle* m_usb = NULL;
 
 	// State owned by USB thread
-	sample_t m_requested_sampleno;
-	sample_t m_in_sampleno;
-	sample_t m_out_sampleno;
+	sample_t m_requested_sampleno = 0;
+	sample_t m_in_sampleno = 0;
+	sample_t m_out_sampleno = 0;
 
 	std::mutex m_state;
 
+	char m_fw_version[32];
+	char m_hw_version[32];
 	char serial_num[32];
 	friend class Session;
 };
@@ -152,8 +226,9 @@ enum Modes {
 
 class Signal {
 public:
-	Signal() : m_info(0), m_src(SRC_CONSTANT), m_src_v1(0), m_dest(DEST_NONE) {}
 	Signal(const sl_signal_info* info): m_info(info), m_src(SRC_CONSTANT), m_src_v1(0), m_dest(DEST_NONE) {}
+	/// Get the descriptor struct of the Signal.
+	/// Pointed-to memory is valid for the lifetime of the Device.
 	const sl_signal_info* info() const { return m_info; }
 	const sl_signal_info* const m_info;
 
@@ -206,18 +281,24 @@ public:
 		m_src_i = 0;
 	}
 
+	/// Get the last measured sample from this signal.
 	value_t measure_instantaneous();
+
+	/// Configure received samples to be stored into `buf`, up to `len` points.
+	/// After `len` points, samples will be dropped.
 	void measure_buffer(value_t* buf, size_t len) {
 		m_dest = DEST_BUFFER;
 		m_dest_buf = buf;
 		m_dest_buf_len = len;
 	}
 
+	/// Configure received samples to be passed to the provided callback.
 	void measure_callback(std::function<void(value_t value)> callback) {
 		m_dest = DEST_CALLBACK;
 		m_dest_callback = callback;
 	}
 
+	/// internal: Called by Device
 	inline void put_sample(value_t val) {
 		m_latest_measurement = val;
 		if (m_dest == DEST_BUFFER) {
@@ -230,6 +311,7 @@ public:
 		}
 	}
 
+	/// internal: Called by Device
 	inline value_t get_sample() {
 		switch (m_src) {
 		case SRC_CONSTANT:
@@ -268,7 +350,7 @@ public:
 				return m_src_v1 + norm_phase * pkpk;
 
 			case SRC_STAIRSTEP:
-				return m_src_v1 + floorf(norm_phase*10)/10 * pkpk;
+				return m_src_v2 - floorf(norm_phase*10)/10 * pkpk;
 
 			case SRC_SINE:
 				return m_src_v1 + (1 + cos(norm_phase * 2 * M_PI)) * pkpk/2;

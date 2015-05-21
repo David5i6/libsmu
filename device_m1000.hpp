@@ -1,5 +1,6 @@
 // Released under the terms of the BSD License
 // (C) 2014-2015
+//   Analog Devices, Inc.
 //   Kevin Mehall <km@kevinmehall.net>
 //   Ian Daniher <itdaniher@gmail.com>
 
@@ -45,18 +46,13 @@ protected:
 	bool submit_in_transfer(libusb_transfer* t);
 	void handle_in_transfer(libusb_transfer* t);
 
-	uint16_t encode_out(int chan);
-
-	std::string m_hw_version;
-	std::string m_fw_version;
-	std::string m_git_version;
+	uint16_t encode_out(unsigned chan);
 
 	unsigned m_packets_per_transfer;
 	Transfers m_in_transfers;
 	Transfers m_out_transfers;
 
-	uint64_t m_sample_rate;
-	uint64_t m_sample_count;
+	uint64_t m_sample_count = 0;
 
 	Signal* m_signals[2][2];
 	unsigned m_mode[2];
