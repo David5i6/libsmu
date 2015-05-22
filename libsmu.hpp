@@ -108,10 +108,10 @@ public:
 	/// Callback called on the USB thread when a device is removed from the system
 	std::function<void(Device* device)> m_hotplug_attach_callback;
 
-	unsigned m_cancellation = 0;
+	unsigned m_cancellation;
 
 protected:
-	sample_t m_min_progress = 0;
+	sample_t m_min_progress;
 
 	void start_usb_thread();
 	std::thread m_usb_thread;
@@ -185,13 +185,13 @@ protected:
 	virtual void cancel() = 0;
 
 	Session* const m_session;
-	libusb_device* const m_device = NULL;
-	libusb_device_handle* m_usb = NULL;
+	libusb_device* const m_device;
+	libusb_device_handle* m_usb;
 
 	// State owned by USB thread
-	sample_t m_requested_sampleno = 0;
-	sample_t m_in_sampleno = 0;
-	sample_t m_out_sampleno = 0;
+	sample_t m_requested_sampleno;
+	sample_t m_in_sampleno;
+	sample_t m_out_sampleno;
 
 	std::mutex m_state;
 
