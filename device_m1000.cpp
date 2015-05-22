@@ -6,6 +6,7 @@
 
 #include "device_m1000.hpp"
 #include <libusb.h>
+#include <math.h>
 #include <iostream>
 #include <cstring>
 #include <cmath>
