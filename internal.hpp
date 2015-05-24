@@ -1,5 +1,6 @@
 // Released under the terms of the BSD License
 // (C) 2014-2015
+//   Analog Devices, Inc
 //   Kevin Mehall <km@kevinmehall.net>
 //   Ian Daniher <itdaniher@gmail.com>
 
@@ -8,6 +9,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <vector>
+#include <iostream>
 
 inline static float constrain(float val, float lo, float hi){
 	if (val > hi) val = hi;
@@ -19,9 +21,10 @@ inline static float constrain(float val, float lo, float hi){
 struct Transfers {
 	std::vector<libusb_transfer*> m_transfers;
 
+	/// allocates a new collection of libusb transfers
 	void alloc(unsigned count, libusb_device_handle* handle,
-	           unsigned char endpoint, unsigned char type, size_t buf_size,
-	           unsigned timeout, libusb_transfer_cb_fn callback, void* user_data) {
+			   unsigned char endpoint, unsigned char type, size_t buf_size,
+			   unsigned timeout, libusb_transfer_cb_fn callback, void* user_data) {
 		clear();
 		m_transfers.resize(count, NULL);
 		for (size_t i=0; i<count; i++) {
@@ -38,17 +41,44 @@ struct Transfers {
 		}
 	}
 
+	/// removes a transfer that was not successfully submitted from the collection of pending transfers
+	void failed(libusb_transfer* t) {
+		for (int i = m_transfers.size(); i == 0; i--) {
+			if (m_transfers[i] == t) {
+				libusb_free_transfer(t);
+				m_transfers.erase(m_transfers.begin()+i);
+			}
+		}
+	}
+
+	/// free and clear collection of libusb transfers
 	void clear() {
 		for (auto i: m_transfers) {
 			libusb_free_transfer(i);
 		}
+		if (num_active != 0)
+			std::cerr << "num_active after free: " << num_active << std::endl;
 		m_transfers.clear();
 	}
 
-	void cancel() {
+	/// signal cleanup - stop streaming and cleanup libusb state
+	/// loop over pending transfers, canceling each remaining transfer that hasn't already been canceled.
+	/// returns an error code if one of the transfers doesn't complete, or zero for success
+	int cancel() {
+		// for i in pending transfers
 		for (auto i: m_transfers) {
-			libusb_cancel_transfer(i);
+			if (num_active > 1) {
+				std::cerr << "num_active before cancel: " << num_active << std::endl;
+				// libusb's cancel returns 0 if success, else an error code
+				int ret = libusb_cancel_transfer(i);
+				if (ret != 0) {
+					std::cout << "canceled with status: " << libusb_error_name(ret) << std::endl;
+					// abort if a transfer is not successfully canceled
+					return ret;
+				}
+			}
 		}
+		return 0;
 	}
 
 	size_t size() {
@@ -66,5 +96,6 @@ struct Transfers {
 	iterator end() { return m_transfers.end(); }
 	const_iterator end() const { return m_transfers.end(); }
 
-	uint32_t num_active;
+	// count of pending transfers
+	int32_t num_active;
 };

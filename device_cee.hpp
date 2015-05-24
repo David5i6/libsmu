@@ -44,7 +44,7 @@ protected:
 	bool submit_in_transfer(libusb_transfer* t);
 	void handle_in_transfer(libusb_transfer* t);
 
-	uint16_t encode_out(int chan, uint32_t igain);
+	uint16_t encode_out(unsigned chan, uint32_t igain);
 
 	std::string m_hw_version;
 	std::string m_fw_version;
@@ -70,9 +70,8 @@ protected:
 	int m_min_per;
 	int m_xmega_per;
 
-	uint64_t m_sample_rate;
 	uint64_t m_sample_count;
-
 	Signal* m_signals[2][2];
+
 	unsigned m_mode[2];
 };
