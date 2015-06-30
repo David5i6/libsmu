@@ -18,6 +18,8 @@ using std::shared_ptr;
 extern "C" int LIBUSB_CALL hotplug_callback_usbthread(
 	libusb_context *ctx, libusb_device *device, libusb_hotplug_event event, void *user_data);
 
+#define CERR_WARN_MESSAGES 0	
+	
 /// session constructor
 Session::Session() {
 	m_active_devices = 0;
@@ -30,7 +32,9 @@ Session::Session() {
 	}
 
 	if (libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) {
+	#if CERR_WARN_MESSAGES	
 		cerr << "Using libusb hotplug" << endl;
+	#endif	
 		if (int r = libusb_hotplug_register_callback(NULL,
 			(libusb_hotplug_event)(LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT),
 			(libusb_hotplug_flag) 0,
@@ -44,7 +48,9 @@ Session::Session() {
 		cerr << "libusb hotplug cb reg failed: " << r << endl;
 	};
 	} else {
+	#if CERR_WARN_MESSAGES
 		cerr << "Libusb hotplug not supported. Only devices already attached will be used." << endl;
+	#endif
 	}
 	start_usb_thread();
 
@@ -72,7 +78,9 @@ void Session::attached(libusb_device *device) {
 	if (dev) {
 		std::lock_guard<std::mutex> lock(m_lock_devlist);
 		m_available_devices.push_back(dev);
+	#if CERR_WARN_MESSAGES	
 		cerr << "Session::attached ser: " << dev->serial() << endl;
+	#endif
 		if (this->m_hotplug_attach_callback) {
 			this->m_hotplug_attach_callback(&*dev);
 		}
@@ -85,7 +93,9 @@ void Session::detached(libusb_device *device)
 	if (this->m_hotplug_detach_callback) {
 		Device *dev = &*this->find_existing_device(device);
 		if (dev) {
+		#if CERR_WARN_MESSAGES	
 			cerr << "Session::detached ser: " << dev->serial() << endl;
+		#endif	
 			this->m_hotplug_detach_callback(dev);
 		}
 	}
@@ -201,7 +211,9 @@ Device* Session::get_device(const char* serial) {
 Device* Session::add_device(Device* device) {
 	if ( device ) {
 		m_devices.insert(device);
+	#if CERR_WARN_MESSAGES	
 		cerr << "device insert " << device << endl;
+	#endif	
 		device->added();
 		return device;
 	}
@@ -215,7 +227,9 @@ void Session::remove_device(Device* device) {
 		device->removed();
 	}
 	else {
+	#if CERR_WARN_MESSAGES	
 		cerr << "no device removed" << endl;
+	#endif	
 	}
 }
 
@@ -241,7 +255,9 @@ void Session::end() {
     //  m_completion.wait(lk, [&]{ return m_active_devices == 0; });
 	// wait on m_completion, return m_active_devices compared with 0
     if (!res) {
-        cerr << "timed out" << endl;
+    #if CERR_WARN_MESSAGES    
+		cerr << "timed out" << endl;
+	#endif	
     }
 	for (auto i: m_devices) {
 		i->off();
