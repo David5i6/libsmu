@@ -18,8 +18,6 @@ using std::shared_ptr;
 extern "C" int LIBUSB_CALL hotplug_callback_usbthread(
 	libusb_context *ctx, libusb_device *device, libusb_hotplug_event event, void *user_data);
 
-#define CERR_WARN_MESSAGES 0	
-	
 /// session constructor
 Session::Session() {
 	m_active_devices = 0;

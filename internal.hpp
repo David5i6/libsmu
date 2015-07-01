@@ -11,6 +11,8 @@
 #include <vector>
 #include <iostream>
 
+#define CERR_WARN_MESSAGES 0
+
 inline static float constrain(float val, float lo, float hi){
 	if (val > hi) val = hi;
 	if (val < lo) val = lo;
@@ -56,8 +58,10 @@ struct Transfers {
 		for (auto i: m_transfers) {
 			libusb_free_transfer(i);
 		}
+	#if CERR_WARN_MESSAGES	
 		if (num_active != 0)
 			std::cerr << "num_active after free: " << num_active << std::endl;
+	#endif	
 		m_transfers.clear();
 	}
 
@@ -68,7 +72,9 @@ struct Transfers {
 		// for i in pending transfers
 		for (auto i: m_transfers) {
 			if (num_active > 1) {
+			#if CERR_WARN_MESSAGES	
 				std::cerr << "num_active before cancel: " << num_active << std::endl;
+			#endif	
 				// libusb's cancel returns 0 if success, else an error code
 				int ret = libusb_cancel_transfer(i);
 				if (ret != 0) {
