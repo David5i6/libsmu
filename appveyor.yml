@@ -11,8 +11,8 @@ install:
   - 7z x -y "c:\libusb.7z" -o"C:\libusb" > nul
   - ps: (new-object System.Net.WebClient).Downloadfile("https://raw.githubusercontent.com/ogrisel/python-appveyor-demo/master/appveyor/install.ps1", "c:\install.ps1")
   - set PYTHON=C:\Python27
-  - set PYTHON_VERSION="2.7.8"
-  - set PYTHON_ARCH="32"
+  - set PYTHON_VERSION="2.7.10"
+  - set PYTHON_ARCH="64"
   - powershell c:\install.ps1
   - "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
 
