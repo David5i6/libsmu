@@ -6,11 +6,8 @@ BIN=smu
 LIB=smu.a
 
 SYS := $(shell gcc -dumpmachine)
-<<<<<<< HEAD
-ifneq (, $(findstring linux, $(SYS)) $(findstring darwin, $(SYS))) 
-=======
+
 ifneq (, $(or $(findstring linux, $(SYS)),$(findstring darwin, $(SYS))))
->>>>>>> analogdevicesinc/master
 	LINKFLAGS+=$(shell pkg-config --libs libusb-1.0)
 	CXXFLAGS+=$(shell pkg-config --cflags libusb-1.0)
 	PYCXXFLAGS=$(shell pkg-config --cflags python-2.7)
@@ -18,15 +15,6 @@ ifneq (, $(or $(findstring linux, $(SYS)),$(findstring darwin, $(SYS))))
 	SHARE=libsmu.so
 	PYSHARE=libpysmu.so
 else
-<<<<<<< HEAD
-		CXXFLAGS += -v -static -static-libgcc -static-libstdc++ -g
-		LINKFLAGS+="/usr/local/lib/libusb-1.0.a"
-		CXXFLAGS+=-I"C:\libusb\include\libusb-1.0"
-		PYCXXFLAGS=-I"C:\Python27\include"
-		PYLINKFLAGS="C:\Python27\libs\libpython27.a"
-		SHARE=libsmu.dll
-		PYSHARE=libpysmu.pyd
-=======
 	CXXFLAGS += -v -static -static-libgcc -static-libstdc++ -g
 	LINKFLAGS+="C:\libusb\libusb-1.0.a"
 	CXXFLAGS+=-I"C:\libusb\include"
@@ -40,7 +28,6 @@ else
 endif
 	SHARE=libsmu.dll
 	PYSHARE=libpysmu.pyd
->>>>>>> analogdevicesinc/master
 endif
 
 
@@ -50,11 +37,7 @@ OBJ=$(SRC:%.cpp=%.o)
 all: $(LIB) $(BIN) $(SHARE)
 
 $(LIB): $(OBJ)
-<<<<<<< HEAD
-	ar cr $@ $^
-=======
 	$(AR) cr $@ $^
->>>>>>> analogdevicesinc/master
 
 $(BIN): cli.o $(LIB)
 	$(CXX) -o $(BIN) $^ $(LINKFLAGS)
