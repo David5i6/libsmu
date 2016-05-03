@@ -5,7 +5,9 @@
 //   Ian Daniher <itdaniher@gmail.com>
 
 #pragma once
+
 #include "libsmu.h"
+
 #include <string>
 #include <set>
 #include <memory>

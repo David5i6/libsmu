@@ -5,9 +5,11 @@
 //   Ian Daniher <itdaniher@gmail.com>
 
 #pragma once
-#include <mutex>
-#include "libsmu.hpp"
+
 #include "internal.hpp"
+#include "libsmu.hpp"
+
+#include <mutex>
 #include <vector>
 
 using std::vector;

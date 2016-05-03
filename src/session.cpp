@@ -5,10 +5,12 @@
 //   Ian Daniher <itdaniher@gmail.com>
 
 #include "libsmu.hpp"
-#include <iostream>
-#include <libusb.h>
-#include <string.h>
 #include "device_m1000.hpp"
+
+#include <iostream>
+#include <string.h>
+
+#include <libusb.h>
 
 using std::shared_ptr;
 

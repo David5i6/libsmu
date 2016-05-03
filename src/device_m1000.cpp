@@ -5,12 +5,14 @@
 //   Ian Daniher <itdaniher@gmail.com>
 
 #include "device_m1000.hpp"
-#include <libusb.h>
+
 #include <iostream>
 #include <cstring>
 #include <cmath>
 #include <cassert>
 #include <vector>
+
+#include <libusb.h>
 
 using std::vector;
 

@@ -5,18 +5,19 @@
 //   Ian Daniher <itdaniher@gmail.com>
 
 #include "libsmu.hpp"
-#include <iostream>
-#include <cstdint>
-#include <vector>
-#include <thread>
-#include <string.h>
-#include <libusb.h>
 
 #ifdef WIN32
 #include "getopt.h"
 #else
 #include <getopt.h>
 #endif
+#include <string.h>
+#include <iostream>
+#include <cstdint>
+#include <vector>
+#include <thread>
+
+#include <libusb.h>
 
 using std::cout;
 using std::cerr;

@@ -5,11 +5,14 @@
 //   Ian Daniher <itdaniher@gmail.com>
 
 #pragma once
+
 #include "libsmu.h"
-#include <libusb.h>
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <vector>
+
+#include <libusb.h>
 
 inline static float constrain(float val, float lo, float hi){
 	if (val > hi) val = hi;
