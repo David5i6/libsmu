@@ -25,8 +25,7 @@
 #endif
 
 typedef enum sl_type {
-	DEVICE_CEE_1 = 0x10000,
-	DEVICE_M1000,
+	DEVICE_M1000 = 0x10000,
 	CHANNEL_SMU = 0x20000,
 	MODE_HIGH_Z = 0x40000,
 	MODE_SVMI,
