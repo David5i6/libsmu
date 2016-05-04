@@ -18,12 +18,6 @@
 
 #define smu_debug(...) do { if (DEBUG_TEST) fprintf(stderr, __VA_ARGS__); } while(0);
 
-#ifdef __GNUC__
-#define __packed __attribute__((packed))
-#else
-#define __packed
-#endif
-
 typedef enum sl_type {
 	DEVICE_M1000 = 0x10000,
 	CHANNEL_SMU = 0x20000,
