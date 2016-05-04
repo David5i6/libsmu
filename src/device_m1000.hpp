@@ -12,8 +12,6 @@
 #include <mutex>
 #include <vector>
 
-using std::vector;
-
 struct libusb_device_handle;
 extern "C" void LIBUSB_CALL m1000_in_completion(libusb_transfer *t);
 extern "C" void LIBUSB_CALL m1000_out_completion(libusb_transfer *t);
@@ -30,7 +28,7 @@ public:
 	virtual void set_mode(unsigned channel, unsigned mode);
 	virtual void sync();
 	virtual int write_calibration(const char* cal_file_name);
-	virtual void calibration(vector<vector<float>>* cal);
+	virtual void calibration(std::vector<std::vector<float>>* cal);
 
 protected:
 	friend class Session;

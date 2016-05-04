@@ -17,8 +17,6 @@
 #include <cmath>
 #include <vector>
 
-using std::vector;
-
 #define LIBSMU_VERSION "0.8.9"
 
 #ifndef M_PI
@@ -44,7 +42,7 @@ public:
 	/// Devices that are present on the system, but aren't necessarily in bound to this session.
 	/// Only `Device::serial` and `Device::info` may be called on a Device that is not added to
 	/// the session.
-	vector<std::shared_ptr<Device>> m_available_devices;
+	std::vector<std::shared_ptr<Device>> m_available_devices;
 
 	/// Add a device (from m_available_devices) to the session.
 	/// This method may not be called while the session is active.
@@ -178,7 +176,7 @@ public:
 	virtual int write_calibration(const char* cal_file_name) { return 0; }
 
 	/// Get the device calibration data from the EEPROM.
-	virtual void calibration(vector<vector<float>>* cal) {};
+	virtual void calibration(std::vector<std::vector<float>>* cal) {};
 
 	/// Flash a firmware image to this device.
 	virtual int flash_firmware(const char* file) { return 0; }

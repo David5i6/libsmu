@@ -12,8 +12,6 @@
 
 #include <libusb.h>
 
-using std::shared_ptr;
-
 extern "C" int LIBUSB_CALL hotplug_callback_usbthread(
 	libusb_context *ctx, libusb_device *device, libusb_hotplug_event event, void *user_data);
 
@@ -65,7 +63,7 @@ Session::~Session() {
 
 /// callback for device attach events
 void Session::attached(libusb_device *device) {
-	shared_ptr<Device> dev = probe_device(device);
+	std::shared_ptr<Device> dev = probe_device(device);
 	if (dev) {
 		std::lock_guard<std::mutex> lock(m_lock_devlist);
 		m_available_devices.push_back(dev);
@@ -80,7 +78,7 @@ void Session::attached(libusb_device *device) {
 void Session::detached(libusb_device *device)
 {
 	if (this->m_hotplug_detach_callback) {
-		shared_ptr<Device> dev = this->find_existing_device(device);
+		std::shared_ptr<Device> dev = this->find_existing_device(device);
 		if (dev) {
 			smu_debug("Session::detached ser: %s\n", dev->serial());
 			this->m_hotplug_detach_callback(&*dev);
@@ -129,7 +127,7 @@ int Session::update_available_devices() {
 	if (num < 0) return num;
 
 	for (int i=0; i<num; i++) {
-		shared_ptr<Device> dev = probe_device(list[i]);
+		std::shared_ptr<Device> dev = probe_device(list[i]);
 		if (dev) {
 			m_lock_devlist.lock();
 			m_available_devices.push_back(dev);
@@ -142,8 +140,8 @@ int Session::update_available_devices() {
 }
 
 /// identify devices supported by libsmu
-shared_ptr<Device> Session::probe_device(libusb_device* device) {
-	shared_ptr<Device> dev = find_existing_device(device);
+std::shared_ptr<Device> Session::probe_device(libusb_device* device) {
+	std::shared_ptr<Device> dev = find_existing_device(device);
 
 	libusb_device_descriptor desc;
 	int r = libusb_get_device_descriptor(device, &desc);
@@ -153,9 +151,9 @@ shared_ptr<Device> Session::probe_device(libusb_device* device) {
 	}
 
 	if (desc.idVendor == 0x0456 && desc.idProduct == 0xCEE2) {
-		dev = shared_ptr<Device>(new M1000_Device(this, device));
+		dev = std::shared_ptr<Device>(new M1000_Device(this, device));
 	} else if (desc.idVendor == 0x064B && desc.idProduct == 0x784C) {
-		dev = shared_ptr<Device>(new M1000_Device(this, device));
+		dev = std::shared_ptr<Device>(new M1000_Device(this, device));
 	}
 
 	if (dev) {
@@ -172,7 +170,7 @@ shared_ptr<Device> Session::probe_device(libusb_device* device) {
 	return NULL;
 }
 
-shared_ptr<Device> Session::find_existing_device(libusb_device* device) {
+std::shared_ptr<Device> Session::find_existing_device(libusb_device* device) {
 	std::lock_guard<std::mutex> lock(m_lock_devlist);
 	for (auto d: m_available_devices) {
 		if (d->m_device == device) {

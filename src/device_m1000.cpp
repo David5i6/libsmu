@@ -14,8 +14,6 @@
 
 #include <libusb.h>
 
-using std::vector;
-
 #define EP_OUT 0x02
 #define EP_IN 0x81
 
@@ -109,7 +107,7 @@ void M1000_Device::read_calibration() {
 }
 
 // Provide external read access to EEPROM calibration data.
-void M1000_Device::calibration(vector<vector<float>>* cal) {
+void M1000_Device::calibration(std::vector<std::vector<float>>* cal) {
 	(*cal).resize(8);
 	for (int i = 0; i < 8; i++) {
 		(*cal)[i].resize(3);

@@ -22,8 +22,6 @@
 using std::cout;
 using std::cerr;
 using std::endl;
-using std::string;
-using std::vector;
 
 static void list_devices(Session* session)
 {
@@ -91,7 +89,7 @@ int write_calibration(Session* session, const char *file)
 
 void display_calibration(Session* session)
 {
-	vector<vector<float>> cal;
+	std::vector<std::vector<float>> cal;
 	for (auto dev: session->m_devices) {
 		printf("%s: serial %s: fw %s: hw %s\n",
 			dev->info()->label, dev->serial(),
