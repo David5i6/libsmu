@@ -163,7 +163,7 @@ int main(int argc, char **argv)
 	}
 
 	session->m_completion_callback = [=](unsigned status){};
-	session->m_progress_callback = [=](sample_t n){};
+	session->m_progress_callback = [=](uint64_t n){};
 
 	session->m_hotplug_detach_callback = [=](Device* device){
 		session->cancel();
