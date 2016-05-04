@@ -10,14 +10,6 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#ifdef DEBUG
-#define DEBUG_TEST 1
-#else
-#define DEBUG_TEST 0
-#endif
-
-#define smu_debug(...) do { if (DEBUG_TEST) fprintf(stderr, __VA_ARGS__); } while(0);
-
 typedef enum sl_type {
 	DEVICE_M1000 = 0x10000,
 	CHANNEL_SMU = 0x20000,

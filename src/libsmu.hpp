@@ -23,6 +23,14 @@
 #define M_PI (4.0*atan(1.0))
 #endif
 
+#ifdef DEBUG
+#define DEBUG_TEST 1
+#else
+#define DEBUG_TEST 0
+#endif
+
+#define smu_debug(...) do { if (DEBUG_TEST) fprintf(stderr, __VA_ARGS__); } while(0);
+
 class Device;
 class Signal;
 struct libusb_device;
