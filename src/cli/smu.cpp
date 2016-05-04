@@ -6,7 +6,7 @@
 
 #include "libsmu.hpp"
 
-#ifdef WIN32
+#ifdef _WIN32
 #include "getopt.h"
 #else
 #include <getopt.h>

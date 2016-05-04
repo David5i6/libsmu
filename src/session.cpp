@@ -5,6 +5,7 @@
 //   Ian Daniher <itdaniher@gmail.com>
 
 #include "libsmu.hpp"
+#include "session.hpp"
 #include "device_m1000.hpp"
 
 #include <iostream>

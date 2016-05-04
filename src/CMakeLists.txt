@@ -25,14 +25,14 @@ set(LIBS_TO_LINK ${LIBUSB_LIBRARIES})
 if(CMAKE_COMPILER_IS_GNUCXX)
 	SET(LIBS_TO_LINK ${LIBS_TO_LINK} m)
 endif()
-set(LIBSMU_CPPFILES session.cpp device_m1000.cpp)
-set(LIBSMU_HEADERS libsmu.hpp)
+set(LIBSMU_CPPFILES session.cpp signal.cpp device_m1000.cpp)
+set(LIBSMU_HEADERS device.hpp session.hpp signal.hpp libsmu.hpp)
 
 add_library(smu ${LIBSMU_CPPFILES} ${LIBSMU_HEADERS})
 set_target_properties(smu PROPERTIES
 	VERSION ${LIBSMU_VERSION}
 	SOVERSION ${LIBSMU_VERSION_MAJOR}
-	PUBLIC_HEADER ${LIBSMU_HEADERS})
+	PUBLIC_HEADER "${LIBSMU_HEADERS}")
 target_link_libraries(smu ${LIBS_TO_LINK})
 
 # force outputted library name for Visual Studio
@@ -43,4 +43,4 @@ endif()
 install(TARGETS smu
 	ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
 	LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-	PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+	PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/libsmu")

@@ -7,7 +7,6 @@
 #pragma once
 
 #include "libsmu.hpp"
-#include "libsmu.h"
 
 #include <stdint.h>
 #include <stdlib.h>
