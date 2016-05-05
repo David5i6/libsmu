@@ -1,5 +1,0 @@
-*.py[co]
-/build
-/dist
-/.coverage
-/*.egg-info

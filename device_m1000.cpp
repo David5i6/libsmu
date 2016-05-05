@@ -1,18 +1,18 @@
 // Released under the terms of the BSD License
-// (C) 2014-2016
+// (C) 2014-2015
 //   Analog Devices, Inc.
 //   Kevin Mehall <km@kevinmehall.net>
 //   Ian Daniher <itdaniher@gmail.com>
 
 #include "device_m1000.hpp"
-
+#include <libusb.h>
 #include <iostream>
 #include <cstring>
 #include <cmath>
 #include <cassert>
-#include <vector>
 
-#include <libusb.h>
+using std::cerr;
+using std::endl;
 
 #define EP_OUT 0x02
 #define EP_IN 0x81
@@ -46,7 +46,7 @@ static const sl_channel_info m1000_channel_info[2] = {
 };
 
 static const sl_signal_info m1000_signal_info[2] = {
-	{ SIGNAL, "Voltage", 0x7, 0x2, unit_V,	0.0, 5.0, 5.0/65536 },
+	{ SIGNAL, "Voltage", 0x7, 0x2, unit_V,  0.0, 5.0, 5.0/65536 },
 	{ SIGNAL, "Current", 0x6, 0x4, unit_A, -0.2, 0.2, 0.4/65536 },
 };
 
@@ -84,7 +84,6 @@ int M1000_Device::init() {
 
 int M1000_Device::added() {
 	libusb_claim_interface(m_usb, 0);
-	read_calibration();
 	return 0;
 }
 
@@ -93,103 +92,6 @@ int M1000_Device::removed() {
 	return 0;
 }
 
-void M1000_Device::read_calibration() {
-	int ret;
-
-	ret = ctrl_transfer(0xC0, 0x01, 0, 0, (unsigned char*)&m_cal, sizeof(EEPROM_cal), 100);
-	if(ret <= 0 || m_cal.eeprom_valid != EEPROM_VALID) {
-		for(int i = 0; i < 8; i++) {
-			m_cal.offset[i] = 0.0f;
-			m_cal.gain_p[i] = 1.0f;
-			m_cal.gain_n[i] = 1.0f;
-		}
-	}
-}
-
-// Provide external read access to EEPROM calibration data.
-void M1000_Device::calibration(std::vector<std::vector<float>>* cal) {
-	(*cal).resize(8);
-	for (int i = 0; i < 8; i++) {
-		(*cal)[i].resize(3);
-		(*cal)[i][0] = m_cal.offset[i];
-		(*cal)[i][1] = m_cal.gain_p[i];
-		(*cal)[i][2] = m_cal.gain_n[i];
-	}
-}
-
-int M1000_Device::write_calibration(const char* cal_file_name) {
-	int cal_records_no = 0;
-	int ret;
-	FILE* fp;
-	char str[128];
-	float ref[16], val[16];
-	int rec_idx;
-	int cnt_n, cnt_p;
-	float gain_p, gain_n;
-
-	// reset calibration to the defaults if NULL is passed
-	if (cal_file_name == NULL) {
-		for(int i = 0; i < 8; i++) {
-			m_cal.offset[i] = 0.0f;
-			m_cal.gain_p[i] = 1.0f;
-			m_cal.gain_n[i] = 1.0f;
-		}
-		cal_records_no = 8;
-		goto write_cal;
-	}
-
-	fp = fopen(cal_file_name, "r");
-	if(!fp) {
-		return -1;
-	}
-
-	while(fgets(str, 128, fp) != NULL) {
-		if(strstr(str, "</>")) {
-			rec_idx = 0;
-			while(fgets(str, 128, fp) != NULL) {
-				if(strstr(str, "<\\>") && rec_idx) {
-					gain_p = 0;
-					gain_n = 0;
-					cnt_n = 0;
-					cnt_p = 0;
-					m_cal.offset[cal_records_no] = val[0] - ref[0];
-					for(int i = 1; i < rec_idx; i++) {
-						if(ref[i] > 0) {
-							gain_p += ref[i] / (val[i] - m_cal.offset[cal_records_no]);
-							cnt_p++;
-						}
-						else {
-							gain_n += ref[i] / (val[i] - m_cal.offset[cal_records_no]);
-							cnt_n++;
-						}
-
-					}
-					m_cal.gain_p[cal_records_no] = cnt_p ? gain_p / (cnt_p) : 1.0f;
-					m_cal.gain_n[cal_records_no] = cnt_n ? gain_n / (cnt_n) : 1.0f;
-					cal_records_no++;
-					break;
-				}
-				else {
-					sscanf(str, "<%f, %f>", &ref[rec_idx], &val[rec_idx]);
-					rec_idx++;
-				}
-			}
-		}
-	}
-
-	fclose(fp);
-
-write_cal:
-	if(cal_records_no != 8) {
-		// invalid calibration file
-		ret = -EINVAL;
-	} else {
-		m_cal.eeprom_valid = EEPROM_VALID;
-		ret = ctrl_transfer(0x40, 0x02, 0, 0, (unsigned char*)&m_cal, sizeof(EEPROM_cal), 100);
-	}
-
-	return ret;
-}
 
 /// Runs in USB thread
 extern "C" void LIBUSB_CALL m1000_in_completion(libusb_transfer *t) {
@@ -266,11 +168,12 @@ void M1000_Device::configure(uint64_t rate) {
 	unsigned transfers = 8;
 	m_packets_per_transfer = ceil(BUFFER_TIME / (sample_time * chunk_size) / transfers);
 
-	m_in_transfers.alloc(transfers, m_usb, EP_IN, LIBUSB_TRANSFER_TYPE_BULK,
-		m_packets_per_transfer*in_packet_size, 10000, m1000_in_completion, this);
+	m_in_transfers.alloc( transfers, m_usb, EP_IN,  LIBUSB_TRANSFER_TYPE_BULK,
+		m_packets_per_transfer*in_packet_size,  10000, m1000_in_completion,  this);
 	m_out_transfers.alloc(transfers, m_usb, EP_OUT, LIBUSB_TRANSFER_TYPE_BULK,
 		m_packets_per_transfer*out_packet_size, 10000, m1000_out_completion, this);
 	m_in_transfers.num_active = m_out_transfers.num_active = 0;
+	//std::cerr << "M1000 rate: " << sample_time <<  " " << m_sam_per << std::endl;
 }
 
 /// encode output samples
@@ -278,17 +181,10 @@ inline uint16_t M1000_Device::encode_out(unsigned chan) {
 	int v = 0;
 	if (m_mode[chan] == SVMI) {
 		float val = m_signals[chan][0].get_sample();
-		val = (val - m_cal.offset[chan*4+2]) * m_cal.gain_p[chan*4+2];
 		val = constrain(val, 0, 5.0);
 		v = 65535*val/5.0;
 	} else if (m_mode[chan] == SIMV) {
 		float val = m_signals[chan][1].get_sample();
-		if(val > 0) {
-			val = (val - m_cal.offset[chan*4+3]) * m_cal.gain_p[chan*4+3];
-		}
-		else {
-			val = (val - m_cal.offset[chan*4+3]) * m_cal.gain_n[chan*4+3];
-		}
 		val = constrain(val, -current_limit, current_limit);
 		v = 65536*(2./5. + 0.8*0.2*20.*0.5*val);
 	} else if (m_mode[chan] == DISABLED) {
@@ -314,10 +210,10 @@ bool M1000_Device::submit_out_transfer(libusb_transfer* t) {
 					buf[i*4+3] = b & 0xff;
 				} else {
 					uint16_t a = encode_out(0);
-					buf[(i+chunk_size*0)*2	] = a >> 8;
+					buf[(i+chunk_size*0)*2  ] = a >> 8;
 					buf[(i+chunk_size*0)*2+1] = a & 0xff;
 					uint16_t b = encode_out(1);
-					buf[(i+chunk_size*1)*2	] = b >> 8;
+					buf[(i+chunk_size*1)*2  ] = b >> 8;
 					buf[(i+chunk_size*1)*2+1] = b & 0xff;
 				}
 				m_out_sampleno++;
@@ -357,29 +253,20 @@ bool M1000_Device::submit_in_transfer(libusb_transfer* t) {
 
 /// reformat received data - integer to float conversion
 void M1000_Device::handle_in_transfer(libusb_transfer* t) {
-	float val;
 	for (unsigned p=0; p<m_packets_per_transfer; p++) {
 		uint8_t* buf = (uint8_t*) (t->buffer + p*in_packet_size);
 
 		for (unsigned i=0; i<chunk_size; i++) {
 			if (strncmp(this->m_fw_version, "2.", 2) == 0) {
-				val = (buf[i*8+0] << 8 | buf[i*8+1]) / 65535.0 * 5.0;
-				m_signals[0][0].put_sample((val - m_cal.offset[0]) * m_cal.gain_p[0]);
-				val = (((buf[i*8+2] << 8 | buf[i*8+3]) / 65535.0 * 0.4 ) - 0.195)*1.25;
-				m_signals[0][1].put_sample((val - m_cal.offset[1]) * (val > 0 ? m_cal.gain_p[1] : m_cal.gain_n[1]));
-				val = (buf[i*8+4] << 8 | buf[i*8+5]) / 65535.0 * 5.0;
-				m_signals[1][0].put_sample((val - m_cal.offset[4]) * m_cal.gain_p[4]);
-				val = (((buf[i*8+6] << 8 | buf[i*8+7]) / 65535.0 * 0.4 ) - 0.195)*1.25;
-				m_signals[1][1].put_sample((val - m_cal.offset[5]) * (val > 0 ? m_cal.gain_p[5] : m_cal.gain_n[5]));
+				m_signals[0][0].put_sample(  (buf[i*8+0] << 8 | buf[i*8+1]) / 65535.0 * 5.0);
+				m_signals[0][1].put_sample((((buf[i*8+2] << 8 | buf[i*8+3]) / 65535.0 * 0.4 ) - 0.195)*1.25);
+				m_signals[1][0].put_sample(  (buf[i*8+4] << 8 | buf[i*8+5]) / 65535.0 * 5.0);
+				m_signals[1][1].put_sample((((buf[i*8+6] << 8 | buf[i*8+7]) / 65535.0 * 0.4 ) - 0.195)*1.25);
 			} else {
-				val = (buf[(i+chunk_size*0)*2] << 8 | buf[(i+chunk_size*0)*2+1]) / 65535.0 * 5.0;
-				m_signals[0][0].put_sample((val - m_cal.offset[0]) * m_cal.gain_p[0]);
-				val = (((buf[(i+chunk_size*1)*2] << 8 | buf[(i+chunk_size*1)*2+1]) / 65535.0 * 0.4 ) - 0.195)*1.25;
-				m_signals[0][1].put_sample((val - m_cal.offset[0]) * (val > 0 ? m_cal.gain_p[1] : m_cal.gain_n[1]));
-				val = (buf[(i+chunk_size*2)*2] << 8 | buf[(i+chunk_size*2)*2+1]) / 65535.0 * 5.0;
-				m_signals[1][0].put_sample((val - m_cal.offset[4]) * m_cal.gain_p[4]);
-				val = (((buf[(i+chunk_size*3)*2] << 8 | buf[(i+chunk_size*3)*2+1]) / 65535.0 * 0.4) - 0.195)*1.25;
-				m_signals[1][1].put_sample((val - m_cal.offset[5]) * (val > 0 ? m_cal.gain_p[5] : m_cal.gain_n[5]));
+				m_signals[0][0].put_sample( (buf[(i+chunk_size*0)*2] << 8 | buf[(i+chunk_size*0)*2+1]) / 65535.0 * 5.0);
+				m_signals[0][1].put_sample((((buf[(i+chunk_size*1)*2] << 8 | buf[(i+chunk_size*1)*2+1]) / 65535.0 * 0.4 ) - 0.195)*1.25);
+				m_signals[1][0].put_sample( (buf[(i+chunk_size*2)*2] << 8 | buf[(i+chunk_size*2)*2+1]) / 65535.0 * 5.0);
+				m_signals[1][1].put_sample((((buf[(i+chunk_size*3)*2] << 8 | buf[(i+chunk_size*3)*2+1]) / 65535.0 * 0.4) - 0.195)*1.25);
 			}
 			m_in_sampleno++;
 		}
@@ -416,7 +303,7 @@ void M1000_Device::set_mode(unsigned chan, unsigned mode) {
 	}
 	// set feedback potentiometers with mode heuristics
 	unsigned pset;
-	switch (mode) {
+	switch (mode ) {
 		case SIMV: pset = 0x7f7f; break;
 		case SVMI: pset = 0x0000; break;
 		case DISABLED:
@@ -425,6 +312,7 @@ void M1000_Device::set_mode(unsigned chan, unsigned mode) {
 	libusb_control_transfer(m_usb, 0x40, 0x59, chan, pset, 0, 0, 100);
 	// set mode
 	libusb_control_transfer(m_usb, 0x40, 0x53, chan, mode, 0, 0, 100);
+	// std::cerr << "sm (" << chan << "," << mode << ")" << std::endl;
 }
 
 /// turn on power supplies, clear sampling state
@@ -438,16 +326,18 @@ void M1000_Device::on() {
 /// get current microframe index, set m_sof_start to be time in the future
 void M1000_Device::sync() {
 	libusb_control_transfer(m_usb, 0xC0, 0x6F, 0, 0, (unsigned char*)&m_sof_start, 2, 100);
+	cerr << m_usb << ": sof now: " << m_sof_start << endl;
 	m_sof_start = (m_sof_start+0xff)&0x3c00;
+	cerr << m_usb << ": sof then: " << m_sof_start << endl;
 }
 
 /// command device to start sampling
 void M1000_Device::start_run(uint64_t samples) {
 	int ret = libusb_control_transfer(m_usb, 0x40, 0xC5, m_sam_per, m_sof_start, 0, 0, 100);
-	if (ret < 0) {
-		smu_debug("control transfer failed with code %i\n", ret);
-		return;
-	}
+    if (ret < 0) {
+        cerr << "control transfer failed with code " << ret << endl;
+        return;
+    }
 	std::lock_guard<std::mutex> lock(m_state);
 	m_sample_count = samples;
 	m_requested_sampleno = m_in_sampleno = m_out_sampleno = 0;
@@ -466,7 +356,7 @@ void M1000_Device::cancel() {
 	int ret_in = m_in_transfers.cancel();
 	int ret_out = m_out_transfers.cancel();
 	if ( (ret_in != ret_out) || (ret_in != 0) || (ret_out != 0) )
-		smu_debug("cancel error in: %s out: %s\n", libusb_error_name(ret_in), libusb_error_name(ret_out));
+		cerr << "cancel error in: " << libusb_error_name(ret_in) << " out: " << libusb_error_name(ret_out) << endl;
 }
 
 /// put outputs into high-impedance mode, stop sampling

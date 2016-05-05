@@ -1,17 +1,19 @@
 // Released under the terms of the BSD License
-// (C) 2014-2016
+// (C) 2014-2015
 //   Analog Devices, Inc.
 //   Kevin Mehall <km@kevinmehall.net>
 //   Ian Daniher <itdaniher@gmail.com>
 
 #include "libsmu.hpp"
-#include "session.hpp"
+#include <iostream>
+#include <libusb.h>
+#include <string.h>
+#include "device_cee.hpp"
 #include "device_m1000.hpp"
 
-#include <iostream>
-#include <string.h>
-
-#include <libusb.h>
+using std::cerr;
+using std::endl;
+using std::shared_ptr;
 
 extern "C" int LIBUSB_CALL hotplug_callback_usbthread(
 	libusb_context *ctx, libusb_device *device, libusb_hotplug_event event, void *user_data);
@@ -21,12 +23,12 @@ Session::Session() {
 	m_active_devices = 0;
 
 	if (int r = libusb_init(&m_usb_cx) != 0) {
-		smu_debug("libusb init failed: %i\n", r);
+		cerr << "libusb init failed: " << r << endl;
 		abort();
 	}
 
 	if (libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) {
-		smu_debug("Using libusb hotplug\n");
+		cerr << "Using libusb hotplug" << endl;
 		if (int r = libusb_hotplug_register_callback(NULL,
 			(libusb_hotplug_event)(LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT),
 			(libusb_hotplug_flag) 0,
@@ -37,10 +39,10 @@ Session::Session() {
 			this,
 			NULL
 		) != 0) {
-		smu_debug("libusb hotplug cb reg failed: %i\n", r);
+		cerr << "libusb hotplug cb reg failed: " << r << endl;
 	};
 	} else {
-		smu_debug("Libusb hotplug not supported. Only devices already attached will be used.\n");
+		cerr << "Libusb hotplug not supported. Only devices already attached will be used." << endl;
 	}
 	start_usb_thread();
 
@@ -64,11 +66,11 @@ Session::~Session() {
 
 /// callback for device attach events
 void Session::attached(libusb_device *device) {
-	std::shared_ptr<Device> dev = probe_device(device);
+	shared_ptr<Device> dev = probe_device(device);
 	if (dev) {
 		std::lock_guard<std::mutex> lock(m_lock_devlist);
 		m_available_devices.push_back(dev);
-		smu_debug("Session::attached ser: %s\n", dev->serial());
+		cerr << "Session::attached ser: " << dev->serial() << endl;
 		if (this->m_hotplug_attach_callback) {
 			this->m_hotplug_attach_callback(&*dev);
 		}
@@ -79,9 +81,9 @@ void Session::attached(libusb_device *device) {
 void Session::detached(libusb_device *device)
 {
 	if (this->m_hotplug_detach_callback) {
-		std::shared_ptr<Device> dev = this->find_existing_device(device);
+		shared_ptr<Device> dev = this->find_existing_device(device);
 		if (dev) {
-			smu_debug("Session::detached ser: %s\n", dev->serial());
+			cerr << "Session::detached ser: " << dev->serial() << endl;
 			this->m_hotplug_detach_callback(&*dev);
 		}
 	}
@@ -99,8 +101,8 @@ void Session::destroy_available(Device *dev) {
 
 /// low-level callback for hotplug events, proxies to session methods
 extern "C" int LIBUSB_CALL hotplug_callback_usbthread(
-	libusb_context *ctx, libusb_device *device, libusb_hotplug_event event, void *user_data) {
-	(void) ctx;
+    libusb_context *ctx, libusb_device *device, libusb_hotplug_event event, void *user_data) {
+    (void) ctx;
 	Session *sess = (Session *) user_data;
 	if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
 		sess->attached(device);
@@ -128,7 +130,7 @@ int Session::update_available_devices() {
 	if (num < 0) return num;
 
 	for (int i=0; i<num; i++) {
-		std::shared_ptr<Device> dev = probe_device(list[i]);
+		shared_ptr<Device> dev = probe_device(list[i]);
 		if (dev) {
 			m_lock_devlist.lock();
 			m_available_devices.push_back(dev);
@@ -141,20 +143,22 @@ int Session::update_available_devices() {
 }
 
 /// identify devices supported by libsmu
-std::shared_ptr<Device> Session::probe_device(libusb_device* device) {
-	std::shared_ptr<Device> dev = find_existing_device(device);
+shared_ptr<Device> Session::probe_device(libusb_device* device) {
+	shared_ptr<Device> dev = find_existing_device(device);
 
 	libusb_device_descriptor desc;
 	int r = libusb_get_device_descriptor(device, &desc);
 	if (r != 0) {
-		smu_debug("Error %i in get_device_descriptor\n", r);
+		cerr << "Error " << r << "in get_device_descriptor" << endl;
 		return NULL;
 	}
 
-	if (desc.idVendor == 0x0456 && desc.idProduct == 0xCEE2) {
-		dev = std::shared_ptr<Device>(new M1000_Device(this, device));
+	if (desc.idVendor == 0x59e3 && desc.idProduct == 0xCEE1) {
+		dev = shared_ptr<Device>(new CEE_Device(this, device));
+	} else if (desc.idVendor == 0x0456 && desc.idProduct == 0xCEE2) {
+		dev = shared_ptr<Device>(new M1000_Device(this, device));
 	} else if (desc.idVendor == 0x064B && desc.idProduct == 0x784C) {
-		dev = std::shared_ptr<Device>(new M1000_Device(this, device));
+		dev = shared_ptr<Device>(new M1000_Device(this, device));
 	}
 
 	if (dev) {
@@ -171,7 +175,7 @@ std::shared_ptr<Device> Session::probe_device(libusb_device* device) {
 	return NULL;
 }
 
-std::shared_ptr<Device> Session::find_existing_device(libusb_device* device) {
+shared_ptr<Device> Session::find_existing_device(libusb_device* device) {
 	std::lock_guard<std::mutex> lock(m_lock_devlist);
 	for (auto d: m_available_devices) {
 		if (d->m_device == device) {
@@ -195,7 +199,7 @@ Device* Session::get_device(const char* serial) {
 Device* Session::add_device(Device* device) {
 	if ( device ) {
 		m_devices.insert(device);
-		smu_debug("device insert: %s\n", device->serial());
+		cerr << "device insert " << device << endl;
 		device->added();
 		return device;
 	}
@@ -209,7 +213,7 @@ void Session::remove_device(Device* device) {
 		device->removed();
 	}
 	else {
-		smu_debug("no device removed\n");
+		cerr << "no device removed" << endl;
 	}
 }
 
@@ -221,7 +225,7 @@ void Session::configure(uint64_t sampleRate) {
 }
 
 /// stream nsamples, then stop
-void Session::run(uint64_t nsamples) {
+void Session::run(sample_t nsamples) {
 	start(nsamples);
 	end();
 }
@@ -232,11 +236,11 @@ void Session::end() {
 	std::unique_lock<std::mutex> lk(m_lock);
 	auto now = std::chrono::system_clock::now();
 	auto res = m_completion.wait_until(lk, now + std::chrono::milliseconds(1000), [&]{ return m_active_devices == 0; });
-	//	m_completion.wait(lk, [&]{ return m_active_devices == 0; });
+    //  m_completion.wait(lk, [&]{ return m_active_devices == 0; });
 	// wait on m_completion, return m_active_devices compared with 0
-	if (!res) {
-		smu_debug("timed out\n");
-	}
+    if (!res) {
+        cerr << "timed out" << endl;
+    }
 	for (auto i: m_devices) {
 		i->off();
 	}
@@ -249,9 +253,9 @@ void Session::wait_for_completion() {
 }
 
 /// start streaming data
-void Session::start(uint64_t nsamples) {
+void Session::start(sample_t nsamples) {
 	m_min_progress = 0;
-	m_cancellation = 0;
+    m_cancellation = 0;
 	for (auto i: m_devices) {
 		i->on();
 		if (m_devices.size() > 1) {
@@ -275,7 +279,7 @@ void Session::handle_error(int status, const char * tag) {
 	std::lock_guard<std::mutex> lock(m_lock);
 	// a canceled transfer completing is not an error...
 	if ((m_cancellation == 0) && (status != LIBUSB_TRANSFER_CANCELLED) ) {
-		smu_debug("error condition at %s: %s\n", tag, libusb_error_name(status));
+		cerr << "error condition at " << tag << " " << libusb_error_name(status) << endl;
 		m_cancellation = status;
 		cancel();
 	}
@@ -295,7 +299,7 @@ void Session::completion() {
 }
 
 void Session::progress() {
-	uint64_t min_progress = ULLONG_MAX;
+	sample_t min_progress = std::numeric_limits<uint64_t>::max();
 	for (auto i: m_devices) {
 		if (i->m_in_sampleno < min_progress) {
 			min_progress = i->m_in_sampleno;

@@ -1,14 +1,5 @@
-# generated files
+*.o
+*.d
+*.a
 *.so
-*.so.*
-*.pc
 smu
-
-# cmake
-/build
-CMakeCache.txt
-CMakeFiles
-CMakeScripts
-Makefile
-cmake_install.cmake
-install_manifest.txt
